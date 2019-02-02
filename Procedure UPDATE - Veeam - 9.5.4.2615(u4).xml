@@ -1,0 +1,179 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ScriptExport xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.kaseya.com/vsa/2008/12/Scripting">
+  <Procedure name="UPDATE - Veeam - 9.5.4.2615(u4)">
+    <Body description="Works with any device running any previous version of 9.5. Updates in place and then reboots server. When it first starts, if prompted to update any components, click refresh prior to initiating. Odds are it is mis-reporting missing components. ">
+      <Statement description="Dropbox link to Veeam files. Note, unpack ISO and repack in ZIP so kaseya can properly extract" name="GetVariable" continueOnFail="false">
+        <Parameter xsi:type="EnumParameter" name="VariableType" value="ConstantValue" />
+        <Parameter xsi:type="StringParameter" name="SourceContent" value="Your download URL here" />
+        <Parameter xsi:type="StringParameter" name="VariableName" value="URL" />
+      </Statement>
+      <Statement description="Create unpack directory" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="if not exist &quot;C:\temp\veeam9.5u4&quot; mkdir &quot;C:\temp\veeam9.5u4&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="False" />
+      </Statement>
+      <If description="Download upgrade package">
+        <Condition name="TestFile">
+          <Parameter xsi:type="StringParameter" name="Path" value="C:\temp\Veeam.zip" />
+          <Parameter xsi:type="EnumParameter" name="Condition" value="NotExists" />
+          <Parameter xsi:type="StringParameter" name="Value" value="" />
+        </Condition>
+        <Then>
+          <Statement name="ExecuteShellCommand" continueOnFail="false">
+            <Parameter xsi:type="StringParameter" name="Command" value="powershell -command &quot;(New-Object System.Net.WebClient).DownloadFile('#URL#', 'C:\temp\Veeam.zip')&quot;" />
+            <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+            <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="False" />
+          </Statement>
+        </Then>
+      </If>
+      <If description="Unpack upgrade package">
+        <Condition name="TestFile">
+          <Parameter xsi:type="StringParameter" name="Path" value="C:\temp\veeam9.5u4\Setup.exe" />
+          <Parameter xsi:type="EnumParameter" name="Condition" value="NotExists" />
+          <Parameter xsi:type="StringParameter" name="Value" value="" />
+        </Condition>
+        <Then>
+          <Statement name="Unzip file" continueOnFail="false">
+            <Parameter xsi:type="StringParameter" name="Parameter1" value="C:\temp\Veeam.zip" />
+            <Parameter xsi:type="StringParameter" name="Parameter2" value="C:\temp\veeam9.5u4" />
+            <Parameter xsi:type="StringParameter" name="Parameter3" value="True" />
+          </Statement>
+        </Then>
+      </If>
+      <If description="Cleanup zip post extraction">
+        <Condition name="TestFile">
+          <Parameter xsi:type="StringParameter" name="Path" value="C:\temp\Veeam.zip" />
+          <Parameter xsi:type="EnumParameter" name="Condition" value="Exists" />
+          <Parameter xsi:type="StringParameter" name="Value" value="" />
+        </Condition>
+        <Then>
+          <Statement name="DeleteFile" continueOnFail="false">
+            <Parameter xsi:type="StringParameter" name="Path" value="C:\temp\Veeam.zip" />
+          </Statement>
+        </Then>
+      </If>
+      <If description="Deploy license">
+        <Condition name="TestFile">
+          <Parameter xsi:type="StringParameter" name="Path" value="C:\Temp\YourLicenceHere.lic" />
+          <Parameter xsi:type="EnumParameter" name="Condition" value="NotExists" />
+          <Parameter xsi:type="StringParameter" name="Value" value="" />
+        </Condition>
+        <Then>
+          <Statement name="WriteFile" continueOnFail="false">
+            <Parameter xsi:type="StringParameter" name="Path" value="C:\Temp\YourLicenceHere.lic" />
+            <Parameter xsi:type="StringParameter" name="ManagedFile" value="VSASharedFiles\YourLicenceHere.lic" />
+            <Parameter xsi:type="BooleanParameter" name="DeleteAfter" value="False" />
+          </Statement>
+        </Then>
+      </If>
+      <Statement description="Backup Veeam Config" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Add-PSSnapin VeeamPSSnapin; Start-VBRConfigurationBackupJob&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Stop all running Veeam Jobs" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Add-PSSnapin VeeamPSSnapin; Get-VBRJob | ?{$_.GetLastState() -eq 'Working'} | Stop-VBRJob&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Terminate shell if running" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="Taskkill /IM veeam.backup.shell.exe /F" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Stop all Veeam services" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Get-Service Veeam* | Stop-Service -Force&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Remove old Veeam instance" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell -command &quot;$product = \&quot;Veeam*\&quot;;$UninstallKeys = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall');$uninstallKeys = foreach ($key in (Get-ChildItem $UninstallKeys) ) {if ($key.GetValue(\&quot;DisplayName\&quot;) -like \&quot;$product\&quot;) {[pscustomobject]@{UninstallString = $key.GetValue(\&quot;UninstallString\&quot;);}}};foreach ($key in $uninstallkeys) {$uninstallString = $key.UninstallString;if ($uninstallString.StartsWith('MsiExec.exe')) {$uninstallString = $uninstallString.replace('/I','/X') + ' /qb- /quiet /passive /norestart'} else {$uninstallString = ' '}&amp; cmd /c $uninstallString}&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Begin u4 installers&#xD;&#xA;Install Backup Catalog" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs01Catalog.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Catalog\VeeamBackupCatalog64.msi&quot;  ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Server" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs02Server.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Backup\Server.x64.msi&quot; ACCEPTEULA=&quot;YES&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot; VBR_LICENSE_FILE=&quot;C:\Temp\YourLicenceHere.lic&quot; VBR_AUTO_UPGRADE=&quot;YES&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Shell" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs03Shell.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Backup\Shell.x64.msi&quot; ACCEPTEULA=&quot;YES&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install AD Explorer" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs04AD.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Explorers\VeeamExplorerForActiveDirectory.msi&quot; ACCEPT_EULA=&quot;1&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Exchange Explorer" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs05Exchange.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Explorers\VeeamExplorerForExchange.msi&quot; ACCEPT_EULA=&quot;1&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Oracle Explorer" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs06Oracle.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Explorers\VeeamExplorerForOracle.msi&quot; ACCEPT_EULA=&quot;1&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Sharepoint Explorer" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs07Sharepoint.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Explorers\VeeamExplorerForSharePoint.msi&quot; ACCEPT_EULA=&quot;1&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install SQL Explorer" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs08SQL.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Explorers\VeeamExplorerForSQL.msi&quot; ACCEPT_EULA=&quot;1&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Linux Agent Redistributable" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs09LinuxRedist.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Packages\VALRedist.msi&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Install Windows Agent Redistributable" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="start /wait msiexec.exe /L*v &quot;C:\temp\InstallLogs10WindowsRedist.txt&quot; /qn /i &quot;C:\temp\veeam9.5u4\Packages\VAWRedist.msi&quot; ACCEPT_THIRDPARTY_LICENSES=&quot;1&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Post install cleanup" name="DeleteFile" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Path" value="C:\Temp\YourLicenceHere.lic" />
+      </Statement>
+      <Statement name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot; If(test-path 'C:\temp\veeam9.5u4'){Remove-Item 'C:\temp\veeam9.5u4' -Recurse -Force}&quot; " />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Ensure Veeam services are started" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell -command &quot;get-service -displayname *veeam* | foreach-object { Start-Service -InputObj $_.Name }&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Re-Scan all repos" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Add-PSSnapin VeeamPSSnapin; Rescan-VBREntity -AllHosts -AllCloudProviders -AllRepositories -AllReplicas -Wait&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement description="Clean stop and Reboot" name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Add-PSSnapin VeeamPSSnapin; Get-VBRJob | ?{$_.GetLastState() -eq 'Working'} | Stop-VBRJob&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="powershell.exe -nologo -executionpolicy bypass -noprofile -command &quot;Get-Service Veeam* | Stop-Service -Force&quot;" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+      <Statement name="ExecuteShellCommand" continueOnFail="false">
+        <Parameter xsi:type="StringParameter" name="Command" value="shutdown -r -f -t 0" />
+        <Parameter xsi:type="EnumParameter" name="ExecuteAccount" value="System" />
+        <Parameter xsi:type="BooleanParameter" name="Is64Bit" value="True" />
+      </Statement>
+    </Body>
+  </Procedure>
+</ScriptExport>
